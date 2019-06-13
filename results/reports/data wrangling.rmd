@@ -14,11 +14,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # 1. Load the veg transect data
-
+Test
 
 
 ```{r }
-
+library(ggplot2)
 ```
 
 # 2. Combine with the veg table (species list) 
