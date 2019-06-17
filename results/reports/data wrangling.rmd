@@ -7,6 +7,8 @@ output:
     toc: yes
     toc_depth: 3
     toc_float: yes
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -14,21 +16,139 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # 1. Load the veg transect data
-Test
 
-
-```{r }
+```{r}
+library(RODBC)
+options(stringsAsFactors = FALSE)
+library(lubridate)
 library(ggplot2)
+
+
+conn <- odbcDriverConnect("Driver=SQL Server; Server=OSMPGIS3; Database=Monitoring")
+
+tblProject <- sqlFetch(conn, 'dbo.tbl_Project')
+
+tblSample <- sqlFetch(conn, 'dbo.tbl_Sample')
+tblEvent <- sqlFetch(conn, 'dbo.tbl_Event')
+tblVeg <- sqlFetch(conn, 'tbl_CCVegData')
+
+tblProject2 <- subset(tblProject, Project_name == 'Coal Creek Riparian Restoration Monitoring')
+
+d <- merge(tblProject2, tblSample, by = 'Project_ID')
+d2 <- merge(d, tblEvent, by = 'Sample_ID')
+
+veg <- merge(d2, tblVeg, by = 'Event_ID')
+
+veg2 <- veg[, c('Date', 'Sample_name', 'Species', 'PctCover', "DBH1"         ,    "DBH2"    ,         "DBH3"   ,         "DBH4"      ,       "DBH5" )]
+
+
+conn2 <- odbcDriverConnect("Driver=SQL Server; Server=OSMPGIS3; Database=Vegetation")
+x <- sqlQuery(conn2, "SELECT * FROM dbo.ZtblOSMPVegetation")
+x <- x[, c('OSMP Code', 'Genus', 'Species', 'Nativity', 'Lifeform', 'LifeHistory', 'CValue')]
+names(x)[names(x) == 'OSMP Code'] <- 'sp'
+
+veg2$Species <- gsub("[[:space:]]*$","",veg2$Species) # drop trailing spaces
+missing.sp <- veg2$Species[!veg2$Species %in% x$sp]
+
+# sum(subset(veg2, Species %in% missing.sp)$PctCover, na.rm = T)
+# sum(veg2$PctCover, na.rm = T)
+# 225/75067 * 100
+# ignorning missing species for now; make up < 0.5% of all cover
+
+names(veg2)[names(veg2) == 'Species'] <- 'sp'
+veg3 <- merge(veg2, x) # combine with species attribute data
+veg3$yr <- year(veg3$Date)
+head(veg3)
+table(veg3$date)
+names(veg3) <- tolower(names(veg3))
+
+veg3$transect <- gsub('CCV-T|P[0-9]', '', veg3$sample_name)
+veg3$plot <- gsub('CCV-T[0-9]P|CCV-T[0-9][0-9]P', '', veg3$sample_name)
+head(veg3)
+veg3 <- veg3[order(veg3$date), ]
+subset(veg3, transect == 1 & plot == 3 & yr ==2004)
+table(veg3$sp, veg3$lifeform)
+
 ```
 
-# 2. Combine with the veg table (species list) 
 
 
-```{r }
+# 2. Describe the sampling history
+
+```{r}
+# table(veg4$yr)
+# table(veg3$yr, veg3$plot, veg3$transect)
+veg4 <- subset(veg3, lifeform %in% c('Shrub', 'Subshrub', 'Tree', 'Woody vine', 'Woody Vine', 'Forb/Subshrub'))
+table(veg3$lifeform)
+veg4 <- subset(veg3, lifeform %in% c('Shrub', 'Subshrub', 'Woody vine', 'Woody Vine', 'Forb/Subshrub'))
+
+veg4$plot <- as.numeric(veg4$plot)
+veg4$transect <- as.numeric(veg4$transect)
+veg5 <- subset(veg4, transect < 16 )
+# table(veg4$transect)
+# 
+# table(veg5$yr)
+# table(veg5$yr, veg5$plot, veg5$transect)
+
+s1 <- aggregate(pctcover ~ yr + transect + plot, sum, na.rm = T, data = veg5)
+s2 <- s1[order( s1$transect, s1$plot, s1$yr), ]
+s3 <- aggregate(pctcover ~ yr + transect, mean, data  = s2)
+ggplot(data = s3, aes(x = yr, y = pctcover, group = transect, color = transect)) +
+  geom_point()+
+  facet_wrap(~transect) +
+  geom_smooth(method = 'lm', se = F) +
+  geom_line()
+
+
+
+
+head(s2)
+library(ggplot2)
+
+ggplot(data = s2, aes(x = yr, y = pctcover)) +
+  geom_point() +
+  facet_grid(transect ~ plot) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+ggplot(data = s2, aes(x = plot, y = pctcover)) +
+  geom_point() +
+  facet_grid(transect ~ yr) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+# 2007 is incomplete and weird
+# transect 3, 4, 6, 7, 8, 9, 10, 13 are weird; filter, need 4 years, keep only plots sampled in all years, need 4 plots per tran
+subset(veg5, transect == 1 & plot == 3 & yr ==2004)
+
+
+s1 <- aggregate(pctcover ~ yr + transect + plot, sum, na.rm = T, data = subset(veg5, yr != 2007 & !(transect %in% c(3, 4, 6, 7, 8, 9, 10, 13))))
+
+s2 <- s1[order( s1$transect, s1$plot, s1$yr), ]
+
+
+ggplot(data = s2, aes(x = plot, y = pctcover, group = yr, color =yr)) +
+  geom_point() +
+  facet_wrap(~transect ) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+ggplot(data = s2, aes(x = plot, y = pctcover)) +
+  geom_point() +
+  facet_grid(transect ~ yr) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+s3 <- aggregate(pctcover ~ yr + transect, mean, data  = s2)
+ggplot(data = s3, aes(x = yr, y = pctcover)) +
+  geom_point()+
+  facet_wrap(~transect) +
+  geom_smooth(method = 'lm', se = F)
+aggregate(pctcover ~ yr, mean, data = s3)
+
+summary(lm(pctcover ~ yr + transect, data = s3))
 
 ```
-
-# 3. Describe the sampling history
 
 
 # 4. Export a clean, flat file for future use
