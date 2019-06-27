@@ -13,69 +13,37 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
 ```
 
 # 1. Load the veg transect data
 
 ```{r}
-library(RODBC)
-options(stringsAsFactors = FALSE)
-library(lubridate)
-library(ggplot2)
 
-
-conn <- odbcDriverConnect("Driver=SQL Server; Server=OSMPGIS3; Database=Monitoring")
-
-tblProject <- sqlFetch(conn, 'dbo.tbl_Project')
-
-tblSample <- sqlFetch(conn, 'dbo.tbl_Sample')
-tblEvent <- sqlFetch(conn, 'dbo.tbl_Event')
-tblVeg <- sqlFetch(conn, 'tbl_CCVegData')
-
-tblProject2 <- subset(tblProject, Project_name == 'Coal Creek Riparian Restoration Monitoring')
-
-d <- merge(tblProject2, tblSample, by = 'Project_ID')
-d2 <- merge(d, tblEvent, by = 'Sample_ID')
-
-veg <- merge(d2, tblVeg, by = 'Event_ID')
-
-veg2 <- veg[, c('Date', 'Sample_name', 'Species', 'PctCover', "DBH1"         ,    "DBH2"    ,         "DBH3"   ,         "DBH4"      ,       "DBH5" )]
-
-
-conn2 <- odbcDriverConnect("Driver=SQL Server; Server=OSMPGIS3; Database=Vegetation")
-x <- sqlQuery(conn2, "SELECT * FROM dbo.ZtblOSMPVegetation")
-x <- x[, c('OSMP Code', 'Genus', 'Species', 'Nativity', 'Lifeform', 'LifeHistory', 'CValue')]
-names(x)[names(x) == 'OSMP Code'] <- 'sp'
-
-veg2$Species <- gsub("[[:space:]]*$","",veg2$Species) # drop trailing spaces
-missing.sp <- veg2$Species[!veg2$Species %in% x$sp]
-
-# sum(subset(veg2, Species %in% missing.sp)$PctCover, na.rm = T)
-# sum(veg2$PctCover, na.rm = T)
-# 225/75067 * 100
-# ignorning missing species for now; make up < 0.5% of all cover
-
-names(veg2)[names(veg2) == 'Species'] <- 'sp'
-veg3 <- merge(veg2, x) # combine with species attribute data
-veg3$yr <- year(veg3$Date)
-head(veg3)
-table(veg3$date)
-names(veg3) <- tolower(names(veg3))
-
-veg3$transect <- gsub('CCV-T|P[0-9]', '', veg3$sample_name)
-veg3$plot <- gsub('CCV-T[0-9]P|CCV-T[0-9][0-9]P', '', veg3$sample_name)
-head(veg3)
-veg3 <- veg3[order(veg3$date), ]
-subset(veg3, transect == 1 & plot == 3 & yr ==2004)
-table(veg3$sp, veg3$lifeform)
+source('scripts/01_import.R')
+source('scripts/02_data_wrangling.R')
 
 ```
-
-
 
 # 2. Describe the sampling history
 
 ```{r}
+
+unique(veg$lifeform)
+
+cover_lifeform <- veg %>%
+  filter(transect == 7) %>%
+  group_by(year, transect, plot, lifeform) %>%
+  summarise(pctcover = sum(pctcover))
+
+ggplot(cover_lifeform, aes(x = year, y = pctcover)) +
+  geom_line(aes(color = lifeform)) +
+  facet_grid(plot ~ .)
+
+
 # table(veg4$yr)
 # table(veg3$yr, veg3$plot, veg3$transect)
 veg4 <- subset(veg3, lifeform %in% c('Shrub', 'Subshrub', 'Tree', 'Woody vine', 'Woody Vine', 'Forb/Subshrub'))
