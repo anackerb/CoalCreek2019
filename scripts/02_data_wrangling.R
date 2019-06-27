@@ -33,7 +33,7 @@ veg_list <- tblOSMPVeg %>%
 # names(x)[names(x) == 'OSMP Code'] <- 'sp'
 
 # veg$Species <- gsub("[[:space:]]*$","",veg2$Species) # drop trailing spaces
-# missing.sp <- veg$Species[!veg$Species %in% x$sp]
+# missing.sp <- veg_list$Species[!veg_list$Species %in% x$sp]
 
 # sum(subset(veg2, Species %in% missing.sp)$PctCover, na.rm = T)
 # sum(veg2$PctCover, na.rm = T)
