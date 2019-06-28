@@ -1,0 +1,134 @@
+---
+title: "Coal Creek data grand tour report June 2019"
+output:
+  html_document:
+    theme: readable
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE, cache = TRUE)
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+```
+
+# Load the veg transect data
+
+```{r}
+setwd('C:/Users/anacb1/City of Boulder/Science Officer - Science Team/Data Science Sprints/Keeley 2019/CoalCreek2019/')
+
+source('scripts/01_import.R')
+source('scripts/02_data_wrangling.R')
+```
+
+The two lines of code above call upon two scripts to pull the data out of the SQL server database and combine it.
+
+# Describe the data
+
+```{r}
+head(veg)
+
+```
+
+* `pctcover` is the main response variable
+* note also the `dbh` columns. Ignoring for now.
+* The `date` field was used to split out a new field for `year` 
+* The `sample_name` field was used to split out two new fields for `transect` and `plot`. 
+* The `lifeform` field will be key for investigating our hypthesis about increasing shrub cover over time, caused by the cessation of grazing.
+
+# Describe the lifeforms
+```{r}
+sort(table(veg$lifeform))
+```
+
+* 12 different lifeforms. Note, we may want to come back to these groups and simplify them.
+
+```{r}
+sort(unique(veg$sp))
+```
+
+* 234 entries for species
+* Includes non-plant things like wood and water. 
+* Note also many taxa only identified to genus (e.g., Rosa sp) and others that are unknown beyond growth form (e.g., unkfo5). 
+* Also, note there were some taxa in the Coal Creek dataset that were not found in the OSMP veg table lookup, which all together make up < 0.5% of all cover; we are skipping/omitting them for now.
+
+# Describe the sampling history
+
+```{r}
+table(veg$plot, veg$transect, veg$year)
+
+
+```
+
+
+* **Years**: 5 years of data; 1999 was pre-fence (grazed), 2001 and after were after fence (ungrazed). The spacing among sampled years is irregular. Note, Marianne has a 6th year off data on hard copy that needs to entered.
+* **Transects**: Notice that transect numbers >16 were only sampled in 2007, so we should exclude those for now, keeping only transect 1-16. 
+* **Plots**: Each transect typically has 5 plots, though some has as many as 8. Don notes that the plot numbers represent position along a cross section of the creek, where 1 would be upland on one bank and 5 (or 6-8) are upland on the other side. The middel numbers would be closer in to the channel.
+
+# Change in the sum cover of each growth from over time
+
+```{r, fig.width = 11, fig.height = 9}
+
+cover_lifeform <- veg %>%
+  filter(transect < 17) %>%
+  group_by(year, transect, lifeform) %>%
+  summarise(pctcover = sum(pctcover, na.rm = T))
+
+ggplot(cover_lifeform, aes(x = year, y = pctcover)) +
+  geom_smooth(method = 'lm', se = F) +
+  facet_grid(lifeform ~ transect, scales = 'free_y') +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+```
+
+This plot was created by summing the cover of each `lifeform` in each `transect` in each `year`. The columns are transects, the rows are lifeforms.
+
+At a glance, I see that:
+
+* 14 out of 16 transects have negative slopes for Graminoids
+* 16 out of 16 transects have positive slops for Ground Cover
+* The rest is pretty random.
+
+For shrubs in particular, it looks to be pretty evenly split between increasing and decreasing cover, and regardless of direction, the slopes aren't very steep.
+
+# Shrub focus
+
+Let's do one more plot, looking at what is happening with shrub cover down at the plot level.
+
+```{r, fig.width = 8, fig.height = 12}
+
+
+cover_lifeform2 <- veg %>%
+  filter(transect < 17, lifeform == 'Shrub') %>%
+  group_by(year, transect, plot) %>%
+  summarise(pctcover = sum(pctcover, na.rm = T))
+
+ggplot(cover_lifeform2, aes(x = year, y = pctcover)) +
+  geom_smooth(method = 'lm', se = F) +
+  facet_grid(transect ~ plot, scales = 'free_y') +
+  geom_point() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+
+```
+
+In this figure, each row represent a transect, and as we move from left to right, we traverse the creek channel. The question is whether we see any evidence for increasing shrub cover in some of the plots, like the ones nearer the creeks, than others, like the more upland plots. The answer appears to be no.
+
+# Next steps
+
+The next steps include:
+
+* Figuring out why the shrub data is so noisey.
+* Revisiting the lifeform designations to perhaps do some lumping.
+* Getting the more recent data entered.
+* etc.
+
